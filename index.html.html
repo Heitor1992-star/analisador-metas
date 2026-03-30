@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analisador de Metas</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f0f; --surface: #1a1a1a; --surface2: #222;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.14);
+    --text: #f0ede8; --muted: #888;
+    --accent: #c8f060; --accent-dark: #9bbf3a;
+    --green: #4ade80; --green-bg: rgba(74,222,128,0.1);
+    --amber: #fbbf24; --amber-bg: rgba(251,191,36,0.1);
+    --red: #f87171; --red-bg: rgba(248,113,113,0.1);
+    --radius: 12px; --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 14px; min-height: 100vh; padding: 24px 16px 60px; }
+  .header { max-width: 740px; margin: 0 auto 28px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .logo { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; background: rgba(200,240,96,0.08); border: 1px solid rgba(200,240,96,0.2); padding: 5px 10px; border-radius: 20px; white-space: nowrap; }
+  .header-right { text-align: right; }
+  .header-right h1 { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; }
+  .header-right p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .main { max-width: 740px; margin: 0 auto; }
+  .upload-zone { border: 1.5px dashed var(--border2); border-radius: var(--radius); padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface); }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(200,240,96,0.04); }
+  .upload-icon { width: 44px; height: 44px; margin: 0 auto 14px; background: rgba(200,240,96,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .upload-icon svg { width: 20px; height: 20px; stroke: var(--accent); fill: none; stroke-width: 1.8; }
+  .upload-title { font-size: 15px; font-weight: 500; margin-bottom: 5px; }
+  .upload-sub { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+  .btn-upload { display: inline-block; background: var(--accent); color: #0f0f0f; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; padding: 9px 20px; border-radius: 20px; border: none; cursor: pointer; }
+  .btn-upload:hover { background: var(--accent-dark); }
+  #fileInput { display: none; }
+  .file-info { display: none; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 14px; background: rgba(200,240,96,0.06); border: 1px solid rgba(200,240,96,0.15); border-radius: var(--radius-sm); font-size: 12px; }
+  .file-info .fname { color: var(--accent); font-family: 'DM Mono', monospace; }
+  .file-info .fsize { color: var(--muted); }
+  .model-badge { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 14px; background: rgba(200,240,96,0.04); border: 1px solid rgba(200,240,96,0.1); border-radius: var(--radius-sm); font-size: 12px; color: var(--muted); }
+  .btn-analisar { width: 100%; margin-top: 14px; background: var(--accent); color: #0f0f0f; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; padding: 13px; border-radius: var(--radius-sm); border: none; cursor: pointer; display: none; }
+  .btn-analisar:hover { background: var(--accent-dark); }
+  .btn-analisar:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status-bar { margin-top: 14px; font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; display: none; align-items: center; gap: 8px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .results { margin-top: 32px; display: none; }
+  .section-label { font-family: 'DM Mono', monospace; font-size: 10px; letter-spacing: 0.1em; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 24px; }
+  .metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+  .metric-card .mlabel { font-size: 11px; color: var(--muted); margin-bottom: 5px; }
+  .metric-card .mval { font-size: 16px; font-weight: 500; font-family: 'DM Mono', monospace; }
+  .metric-card .msub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .lojas-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+  .loja-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .loja-card.hit { border-color: rgba(74,222,128,0.35); }
+  .loja-card.warn { border-color: rgba(251,191,36,0.35); }
+  .loja-card.miss { border-color: rgba(248,113,113,0.35); }
+  .loja-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 6px; }
+  .loja-nome { font-size: 14px; font-weight: 500; }
+  .badge { font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+  .badge-green { background: var(--green-bg); color: var(--green); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); }
+  .badge-red { background: var(--red-bg); color: var(--red); }
+  .loja-nums { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin-bottom: 10px; }
+  .num-item .nlabel { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+  .num-item .nval { font-size: 12px; font-family: 'DM Mono', monospace; font-weight: 500; }
+  .progress-wrap { background: var(--surface2); border-radius: 4px; height: 4px; overflow: hidden; margin-bottom: 8px; }
+  .progress-bar { height: 4px; border-radius: 4px; }
+  .loja-alerta { font-size: 11px; padding: 7px 10px; border-radius: var(--radius-sm); line-height: 1.5; }
+  .alerta-green { background: var(--green-bg); color: var(--green); }
+  .alerta-amber { background: var(--amber-bg); color: var(--amber); }
+  .alerta-red { background: var(--red-bg); color: var(--red); }
+  .dias-pills { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 20px; }
+  .dia-pill { padding: 2px 8px; border-radius: 20px; font-size: 10px; font-family: 'DM Mono', monospace; }
+  .dia-pill.sab { background: rgba(200,240,96,0.15); color: var(--accent); }
+  .dia-pill.dom { background: rgba(200,240,96,0.08); color: var(--accent-dark); }
+  .dia-pill.normal { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+  .ia-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; }
+  .ia-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .ia-badge { font-family: 'DM Mono', monospace; font-size: 10px; background: rgba(200,240,96,0.1); color: var(--accent); border: 1px solid rgba(200,240,96,0.2); padding: 3px 8px; border-radius: 20px; letter-spacing: 0.08em; }
+  .ia-title { font-size: 13px; font-weight: 500; color: var(--muted); }
+  .ia-text { font-size: 13px; line-height: 1.75; color: var(--text); white-space: pre-wrap; }
+  .ia-loading { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+  .btn-novo { width: 100%; background: transparent; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border2); cursor: pointer; }
+  .btn-novo:hover { color: var(--text); }
+  @media (max-width: 500px) {
+    .summary-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .loja-nums { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .header { flex-direction: column; }
+    .header-right { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <span class="logo">Analisador de Metas</span>
+  <div class="header-right">
+    <h1>Relatório de lojas</h1>
+    <p>Projeção com sazonalidade histórica 2025</p>
+  </div>
+</div>
+<div class="main">
+  <div class="upload-zone" id="uploadZone">
+    <div class="upload-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <div class="upload-title">Envie a planilha de metas</div>
+    <div class="upload-sub">Arraste o arquivo aqui ou clique para selecionar — .xlsx, .xls, .csv</div>
+    <button class="btn-upload" onclick="document.getElementById('fileInput').click()">Selecionar arquivo</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFile(this.files[0])">
+  </div>
+  <div class="file-info" id="fileInfo">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+    <span class="fname" id="fileName"></span>
+    <span class="fsize" id="fileSize"></span>
+  </div>
+  <div class="model-badge">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+    <span style="color:var(--accent);font-family:'DM Mono',monospace;font-size:11px;">Modelo sazonal ativo</span>
+    <span>— pesos calibrados com Jan–Dez 2025 (dia da semana + mês)</span>
+  </div>
+  <button class="btn-analisar" id="btnAnalisar" onclick="analisar()">Gerar relatório com IA</button>
+  <div class="status-bar" id="statusBar"><div class="dot"></div><span id="statusText">Analisando...</span></div>
+  <div class="results" id="results">
+    <div class="section-label">Resumo geral</div>
+    <div class="summary-grid" id="summaryGrid"></div>
+    <div class="section-label">Dias restantes no mês</div>
+    <div class="dias-pills" id="diasPills"></div>
+    <div class="section-label">Situação por loja</div>
+    <div class="lojas-grid" id="lojasGrid"></div>
+    <div class="section-label">Análise da IA</div>
+    <div class="ia-section">
+      <div class="ia-header"><span class="ia-badge">IA</span><span class="ia-title">Diagnóstico e recomendações</span></div>
+      <div id="iaText"><div class="ia-loading"><div class="dot"></div> Gerando análise...</div></div>
+    </div>
+    <button class="btn-novo" onclick="resetar()">Analisar outra planilha</button>
+  </div>
+</div>
+
+<script>
+const PESOS_DOW = {
+  "SHOPPING PARK": [0.856,0.869,1.020,0.898,0.950,1.513,0.894],
+  "SÃO JORGE":     [0.862,0.903,1.091,0.874,0.944,1.606,0.720],
+  "MORUMBI":       [0.797,0.826,1.058,0.917,0.927,1.502,0.971],
+  "CANAÃ":         [0.829,0.880,1.073,0.890,0.942,1.639,0.747],
+  "ROOSEVELT":     [0.872,0.964,1.085,0.943,1.068,1.454,0.615],
+};
+const PESOS_MES = {
+  "SHOPPING PARK": [0,0.939,1.405,0.811,0.785,0.959,0.861,0.860,1.000,0.798,1.201,0.912,1.468],
+  "SÃO JORGE":     [0,0.978,1.452,0.686,0.662,0.904,0.866,0.842,1.000,0.742,1.199,1.001,1.669],
+  "MORUMBI":       [0,0.954,1.560,0.726,0.667,0.880,0.910,0.810,1.000,0.745,1.260,0.956,1.530],
+  "CANAÃ":         [0,0.896,1.539,0.729,0.691,0.838,0.881,0.818,1.000,0.720,1.287,1.011,1.590],
+  "ROOSEVELT":     [0,0.994,1.366,0.758,0.758,0.870,0.944,0.877,1.000,0.752,1.072,0.986,1.624],
+};
+// Modelo DOW: 0=Seg,1=Ter,2=Qua,3=Qui,4=Sex,5=Sáb,6=Dom
+function dowModelo(jsDay) { return jsDay === 0 ? 6 : jsDay - 1; }
+
+let dadosLidos = null;
+const uz = document.getElementById('uploadZone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('drag'));
+uz.addEventListener('drop', e => { e.preventDefault(); uz.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+
+function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  document.getElementById('fileName').textContent = file.name;
+  document.getElementById('fileSize').textContent = (file.size/1024).toFixed(1)+' KB';
+  document.getElementById('fileInfo').style.display = 'flex';
+  const reader = new FileReader();
+  if (ext === 'csv') {
+    reader.onload = e => { dadosLidos = e.target.result; document.getElementById('btnAnalisar').style.display = 'block'; };
+    reader.readAsText(file, 'UTF-8');
+  } else {
+    reader.onload = e => {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      dadosLidos = XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]], {FS:';'});
+      document.getElementById('btnAnalisar').style.display = 'block';
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function parseVal(s) {
+  if (!s) return 0;
+  s = s.toString().trim();
+  if (['R$ -','R$  -','-',''].includes(s)) return 0;
+  return parseFloat(s.replace(/R\$\s?/g,'').replace(/\./g,'').replace(',','.').trim()) || 0;
+}
+
+function parseCsv(csv) {
+  const lines = csv.split('\n').map(l => l.split(';').map(c => c.trim()));
+  let lojas=[], metas={}, faturado={}, diasVendas={}, mesAtual=null, anoAtual=null;
+  for (const linha of lines) {
+    const key = (linha[0]||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if (key==='LOJAS'||key==='LOJA') lojas = linha.slice(1).map(l=>l.trim()).filter(l=>l&&!l.startsWith('R$'));
+    if (key&&(key.includes('PROJ')||key.includes('META'))) lojas.forEach((l,i)=>{ metas[l]=parseVal(linha[i+1]); });
+    if (key&&key.includes('FATUR')) lojas.forEach((l,i)=>{ faturado[l]=parseVal(linha[i+1]); diasVendas[l]=0; });
+    const m = (linha[0]||'').match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    if (m) {
+      if (!mesAtual) { mesAtual=parseInt(m[2]); anoAtual=parseInt(m[3]); }
+      lojas.forEach((l,i)=>{ if(parseVal(linha[i+1])>0 && diasVendas[l]!==undefined) diasVendas[l]++; });
+    }
+  }
+  if (!lojas.length) return null;
+  return { lojas: lojas.filter(l=>l&&metas[l]>0), metas, faturado, diasVendas, mes: mesAtual, ano: anoAtual };
+}
+
+function getDiasRestantes(mes, ano) {
+  const hoje = new Date();
+  const ultimoDia = new Date(ano, mes, 0).getDate();
+  const diaHoje = hoje.getMonth()+1===mes && hoje.getFullYear()===ano ? hoje.getDate() : ultimoDia;
+  const dias = [];
+  for (let d=diaHoje+1; d<=ultimoDia; d++) dias.push(new Date(ano, mes-1, d));
+  return dias;
+}
+
+function projecaoSazonal(loja, fat, diasVendas, mes, diasRestantes) {
+  const pesoMes = (PESOS_MES[loja]||[])[mes] || 1;
+  const mediaDiaria = diasVendas > 0 ? (fat / diasVendas) / pesoMes : 0;
+  let extra = 0;
+  for (const dt of diasRestantes) {
+    const dow = dowModelo(dt.getDay());
+    const pesoDow = (PESOS_DOW[loja]||[])[dow] || 1;
+    extra += mediaDiaria * pesoDow * pesoMes;
+  }
+  return fat + extra;
+}
+
+function fmt(v) { return 'R$ '+Math.round(v).toLocaleString('pt-BR'); }
+
+async function analisar() {
+  const btn = document.getElementById('btnAnalisar');
+  const sb = document.getElementById('statusBar');
+  btn.disabled = true; sb.style.display = 'flex';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('statusText').textContent = 'Lendo planilha...';
+
+  const parsed = parseCsv(dadosLidos);
+  if (!parsed||!parsed.lojas.length) {
+    document.getElementById('statusText').textContent = 'Não foi possível ler os dados. Verifique o formato.';
+    btn.disabled = false; return;
+  }
+
+  const { lojas, metas, faturado, diasVendas, mes, ano } = parsed;
+  const mesAtual = mes||(new Date().getMonth()+1);
+  const anoAtual = ano||new Date().getFullYear();
+  const meses = ['','Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  document.getElementById('statusText').textContent = 'Calculando projeção sazonal...';
+  const diasRest = getDiasRestantes(mesAtual, anoAtual);
+  const nDias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+  document.getElementById('diasPills').innerHTML = diasRest.length === 0
+    ? '<span style="font-size:12px;color:var(--muted)">Mês encerrado</span>'
+    : diasRest.map(dt => {
+        const d = dt.getDay();
+        const cls = d===6?'sab':d===0?'dom':'normal';
+        const mm = String(mesAtual).padStart(2,'0');
+        return `<span class="dia-pill ${cls}">${dt.getDate()}/${mm} ${nDias[d]}</span>`;
+      }).join('');
+
+  let totalProj=0, totalMeta=0, totalFat=0;
+  const rows = lojas.map(loja => {
+    const fat = faturado[loja]||0;
+    const meta = metas[loja]||0;
+    const proj = diasRest.length>0 ? projecaoSazonal(loja, fat, diasVendas[loja]||1, mesAtual, diasRest) : fat;
+    const diff = proj - meta;
+    const pct = Math.min(100, Math.round((proj/meta)*100));
+    totalProj+=proj; totalMeta+=meta; totalFat+=fat;
+    let status, cls, bCls, aCls;
+    if (diff>=0)             { status='Vai bater';       cls='hit';  bCls='badge-green'; aCls='alerta-green'; }
+    else if(diff>-meta*0.07) { status='Risco moderado';  cls='warn'; bCls='badge-amber'; aCls='alerta-amber'; }
+    else                     { status='Em risco';         cls='miss'; bCls='badge-red';   aCls='alerta-red'; }
+    return {loja,fat,meta,proj,diff,pct,status,cls,bCls,aCls};
+  });
+
+  const diffTotal = totalProj-totalMeta;
+  const pctTotal = Math.round((totalProj/totalMeta)*100);
+
+  document.getElementById('summaryGrid').innerHTML = `
+    <div class="metric-card"><div class="mlabel">Faturado até agora</div><div class="mval">${fmt(totalFat)}</div><div class="msub">${meses[mesAtual]} ${anoAtual}</div></div>
+    <div class="metric-card"><div class="mlabel">Projeção sazonal</div><div class="mval" style="color:${diffTotal>=0?'var(--green)':'var(--red)'};">${fmt(totalProj)}</div><div class="msub">${pctTotal}% da meta · ${diasRest.length} dias restantes</div></div>
+    <div class="metric-card"><div class="mlabel">${diffTotal>=0?'Superávit':'Déficit'} esperado</div><div class="mval" style="color:${diffTotal>=0?'var(--green)':'var(--red)'};">${fmt(Math.abs(diffTotal))}</div><div class="msub">vs meta ${fmt(totalMeta)}</div></div>`;
+
+  document.getElementById('lojasGrid').innerHTML = rows.map(r => {
+    const barC = r.cls==='hit'?'var(--green)':r.cls==='warn'?'var(--amber)':'var(--red)';
+    const msg = r.diff>=0
+      ? `Projeção supera a meta em ${fmt(r.diff)}`
+      : `Faltam ${fmt(Math.abs(r.diff))} — precisa de ${fmt(Math.abs(r.diff)/Math.max(diasRest.length,1))}/dia nos próximos ${diasRest.length} dias`;
+    return `<div class="loja-card ${r.cls}">
+      <div class="loja-top"><span class="loja-nome">${r.loja}</span><span class="badge ${r.bCls}">${r.status}</span></div>
+      <div class="loja-nums">
+        <div class="num-item"><div class="nlabel">Faturado</div><div class="nval">${fmt(r.fat)}</div></div>
+        <div class="num-item"><div class="nlabel">Projeção</div><div class="nval">${fmt(r.proj)}</div></div>
+        <div class="num-item"><div class="nlabel">Meta</div><div class="nval">${fmt(r.meta)}</div></div>
+        <div class="num-item"><div class="nlabel">% da meta</div><div class="nval">${r.pct}%</div></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:${r.pct}%;background:${barC};"></div></div>
+      <div class="loja-alerta ${r.aCls}">${msg}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('statusText').textContent = 'Gerando análise com IA...';
+  document.getElementById('iaText').innerHTML = '<div class="ia-loading"><div class="dot"></div> Gerando análise...</div>';
+
+  const sabs = diasRest.filter(d=>d.getDay()===6).length;
+  const doms = diasRest.filter(d=>d.getDay()===0).length;
+  const resumo = rows.map(r=>`${r.loja}: faturado ${fmt(r.fat)}, projeção sazonal ${fmt(r.proj)}, meta ${fmt(r.meta)}, status: ${r.status}`).join('\n');
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514', max_tokens: 1000,
+        messages: [{ role: 'user', content: `Você é um analista de varejo experiente. Escreva um diagnóstico executivo em português brasileiro, direto e prático, com:
+1. Uma frase resumindo o cenário geral do mês
+2. Quais lojas merecem atenção imediata e por quê
+3. 2-3 recomendações práticas para os gestores agirem nos próximos dias
+
+Contexto: projeção usa modelo sazonal com histórico 2025. ${diasRest.length} dias restantes, sendo ${sabs} sábado(s) e ${doms} domingo(s).
+
+Dados de ${meses[mesAtual]} ${anoAtual}:
+${resumo}
+
+Total faturado: ${fmt(totalFat)} | Projeção: ${fmt(totalProj)} | Meta: ${fmt(totalMeta)}
+
+Escreva em parágrafos curtos, sem bullet points, sem markdown.` }]
+      })
+    });
+    const data = await resp.json();
+    document.getElementById('iaText').innerHTML = `<div class="ia-text">${data.content?.map(b=>b.text||'').join('')||'Não foi possível gerar a análise.'}</div>`;
+  } catch(e) {
+    document.getElementById('iaText').innerHTML = `<div class="ia-text" style="color:var(--muted)">Análise da IA indisponível. Os dados foram calculados com sucesso pelo modelo sazonal.</div>`;
+  }
+  sb.style.display = 'none'; btn.disabled = false;
+}
+
+function resetar() {
+  dadosLidos = null;
+  document.getElementById('fileInput').value = '';
+  document.getElementById('fileInfo').style.display = 'none';
+  document.getElementById('btnAnalisar').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('statusBar').style.display = 'none';
+}
+</script>
+</body>
+</html>
